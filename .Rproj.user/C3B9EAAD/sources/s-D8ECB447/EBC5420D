@@ -3,7 +3,7 @@
     "path": "/crex/proj/sllstore2017033/nobackup/work/linnea/RaukR/raukRproject/workspace.Rmd",
     "project_path": "workspace.Rmd",
     "type": "r_markdown",
-    "hash": "148034350",
+    "hash": "0",
     "contents": "",
     "dirty": false,
     "created": 1624262768282.0,
@@ -13,15 +13,15 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "2,22",
-        "scrollLine": "0"
+        "cursorPosition": "38,0",
+        "scrollLine": "25"
     },
     "folds": "",
-    "lastKnownWriteTime": 1624262797,
+    "lastKnownWriteTime": 1624270675,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1624262797980,
+    "last_content_update": 1624270675290,
     "read_only": false,
     "read_only_alternatives": []
 }

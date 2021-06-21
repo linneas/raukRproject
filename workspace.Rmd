@@ -4,26 +4,43 @@ author: "Linnéa Smeds"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+# 1 Setting up
+```{r}
+renv::install("vcfR")
+require(vcfR)
+require(tidyverse)
+
 ```
 
-## R Markdown
+# 2. Reading in the data
+```{r}
+vcf_file="data/Wolf.deleterious.missense.polarized.vcf"
+pop_file="data/5TempClasses11I95F15R.pop.list"
+vcf <- read.vcfR(vcf_file)
+pop_list<-read.table(pop_file, header = FALSE, sep = "\t")
+pop <- as.factor(pop_list$V2)
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
+## 2.1 Convert to tidy format
+```{r}
+tidy_vcf <- vcfR2tidy(vcf, 
+                      info_fields=c("AA"), 
+                      format_fields=c("GT"), 
+                      dot_is_NA=TRUE)
+```
+## 2.2 Investigating tidy format
+```{r}
+# there are three separate tables, the gt one is over 1M rows
+head(tidy_vcf)
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+# checking how often ancestral is reference
+okpos<- tidy_vcf$fix %>%filter(REF==AA)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# 3. Analysis
+```{r}
+myDiff <- genetic_diff(vcf, pops = pop, method = 'nei')
+```
+

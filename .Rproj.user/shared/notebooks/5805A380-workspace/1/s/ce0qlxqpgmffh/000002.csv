@@ -1,0 +1,7 @@
+"0","tidy_vcf <- vcfR2tidy(vcf, 
+                      info_fields=c(""AA""), 
+                      format_fields=c(""GT""), 
+                      dot_is_NA=TRUE)
+"
+"2","Extracting gt element GT
+"
