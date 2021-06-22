@@ -24,7 +24,8 @@ pop_table<-read.table(pop_file, header = FALSE, sep = "\t")
 pop_tib<-as_tibble(pop_table) %>% rename(Indiv=V1, Pop=V2)
 pop <- as.factor(pop_table$V2)
 toc()
-
+#7.417 sec (EBC)
+#7.442 sec (home)
 ```
 
 ## 2.1 Convert to tidy format
@@ -35,6 +36,8 @@ tidy_vcf <- vcfR2tidy(vcf,
                       format_fields=c("GT"), 
                       dot_is_NA=TRUE)
 toc()
+# 8.265 sec (EBC)
+# 10.046 sec (home)
 ```
 ## 2.2 Investigating tidy format
 ```{r}
@@ -72,7 +75,8 @@ het<-tidy_vcf$gt %>% filter(gt_GT=="0/1") %>% group_by(Indiv) %>%summarize(num_h
 # merge everything
 tidy_gt<-aa_tib %>% inner_join(het) %>% inner_join(der_tib) 
 toc()
-#1.606sec
+# 1.404 sec (home)
+#4.072sec
 ```
 
 ###2.2.2 Trial 2
@@ -85,23 +89,77 @@ altAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(invertpos) %>% g
 # merge
 tidy_gt2 <- refAA_tib %>% inner_join(altAA_tib) %>% transmute(Indiv, num_aa=altAA_homanc+refAA_homanc, num_het=refAA_het+altAA_het, num_der=refAA_homder+altAA_homder) 
 toc()
-#0.993 sec
+#2.521 sec (EBC)
+#0.993 sec (home)
 ```
 ###2.2.3 Trial 3 - Best version!
 ```{r}
 tic()
 tidy_gt3<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(tidy_vcf$fix)  %>% mutate(new_gt=case_when((ALT==AA & gt_GT=='0/0') ~'1/1', (ALT==AA & gt_GT=='1/1') ~'0/0', TRUE ~ gt_GT)) %>% group_by(Indiv, new_gt) %>% summarize(count=n()) %>% ungroup() %>% mutate_if(is.character, str_replace_all, pattern = "/", replacement = "") %>% pivot_wider(names_from=new_gt, names_prefix="gt", values_from=count)
 toc()
-#0.691 sec
+#1.622 sec (EBC)
+#0.691 sec (home)
 
-# But I think I want a fourth column with the totals so I can plot the frequency, and I need to add the population names!
-final_gt<- tidy_gt3 %>% mutate(sum=gt00+gt01+gt11)
+#Add population names and some extra columns to facilitate plotting!
+final_gt<- tidy_gt3 %>% mutate(sum=gt00+gt01+gt11) %>% inner_join(pop_tib) %>% mutate(hetfrq=gt01/sum, homderfrq=gt11/sum, deralfreq=(gt11*2+gt01)/(sum*2),Grp=case_when(Pop=='Finland' | Pop=='Russia' ~ Pop, TRUE ~ 'Scandinavia')) 
 ```
 
 
-# 3. Analysis - plot the boxes
+# 3. Analysis / Plots
+##3.1 Boxplots
+###3.1.1 First try: boxes and points
 ```{r}
-ggplot(final_gt,aes(cut,price))+
-  geom_boxplot(aes(fill=color))
+ggplot(final_gt,aes(Pop,hetfrq))+
+  geom_boxplot(aes(fill=Pop))+
+    geom_point() +
+    labs(x=NULL,y="proportion heterozygous sites")+
+    theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+
+```
+### 3.1.2 Geometric jitter
+```{r}
+ggplot(final_gt,aes(Pop,homderfrq))+
+  geom_jitter(aes(color=Pop),alpha=0.3) +
+  labs(x=NULL,y="proportion heterozygous sites")
+# This doesn't look good at all, too few points per class!
+```
+### 3.1.3 Reorder boxes (using factors)
+```{r}
+# add factors to pop and order as I want
+final_gt$Pop <- factor(final_gt$Pop, levels = c("1983-1990", "1991-1998", "1999-2006", "2007-2014S", "2007-2014I", "Immigrant", "Finland", "Russia"))
+ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_boxplot(aes(fill=Pop))+
+  geom_point() +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(legend.title=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+###3.1.4 Try facet
+```{r}
+ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_boxplot(aes(fill=Pop))+
+  geom_point() +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(legend.title=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+```
+###3.1.4 Violin, colours etc
+```{r}
+ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_violin(aes(fill=Pop))+
+  geom_point() +
+  scale_fill_viridis(discrete=TRUE) +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(panel.grid.major = element_line(colour = 'white'),
+        panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),
+        legend.title=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
 ```
 
