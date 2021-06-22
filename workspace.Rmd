@@ -9,25 +9,32 @@ output: html_document
 renv::install("vcfR")
 require(vcfR)
 require(tidyverse)
+renv::install("tictoc")
+require(tictoc)
 
 ```
 
 # 2. Reading in the data
 ```{r}
+tic()
 vcf_file="data/Wolf.deleterious.missense.polarized.vcf"
 pop_file="data/5TempClasses11I95F15R.pop.list"
 vcf <- read.vcfR(vcf_file)
-pop_list<-read.table(pop_file, header = FALSE, sep = "\t")
-pop <- as.factor(pop_list$V2)
+pop_table<-read.table(pop_file, header = FALSE, sep = "\t")
+pop_tib<-as_tibble(pop_table) %>% rename(Indiv=V1, Pop=V2)
+pop <- as.factor(pop_table$V2)
+toc()
 
 ```
 
 ## 2.1 Convert to tidy format
 ```{r}
+tic()
 tidy_vcf <- vcfR2tidy(vcf, 
                       info_fields=c("AA"), 
                       format_fields=c("GT"), 
                       dot_is_NA=TRUE)
+toc()
 ```
 ## 2.2 Investigating tidy format
 ```{r}
@@ -36,11 +43,65 @@ head(tidy_vcf)
 
 # checking how often ancestral is reference
 okpos<- tidy_vcf$fix %>%filter(REF==AA)
+# and the opposite, ancestral is alternative (needs flipping!)
+invertpos<-tidy_vcf$fix %>%filter(ALT==AA)
+```
+
+## 2.2 Extracting relevant data 
+### 2.2.1 Trial 1
+```{r}
+tic()
+# REF is ANCESTRAL
+# 0/0 
+homref_aa_ref<-tidy_vcf$gt %>% inner_join(okpos) %>% filter(gt_GT=="0/0") %>% group_by(Indiv) %>%summarize(num_homref_aa=n())
+# 1/1
+homalt_aa_ref<-tidy_vcf$gt %>% inner_join(okpos) %>% filter(gt_GT=="1/1") %>% group_by(Indiv) %>%summarize(num_homalt_der=n())
+# ALT is ANCESTRAL
+#0/0
+homref_aa_alt<-tidy_vcf$gt %>% inner_join(invertpos) %>% filter(gt_GT=="0/0") %>% group_by(Indiv) %>%summarize(num_homref_der=n())
+# 1/1
+homalt_aa_alt<-tidy_vcf$gt %>% inner_join(invertpos) %>% filter(gt_GT=="1/1") %>% group_by(Indiv) %>%summarize(num_homalt_aa=n())
+# merge above
+aa_tib<- homref_aa_ref %>% inner_join(homalt_aa_alt) %>% mutate(num_aa=num_homref_aa+num_homalt_aa) %>% select(Indiv, num_aa)
+der_tib<-homalt_aa_ref %>% inner_join(homref_aa_alt) %>% mutate(num_der=num_homref_der+num_homalt_der) %>% select(Indiv, num_der)
+
+# For heterozygous sites, AA doesn't matter
+#0/1
+het<-tidy_vcf$gt %>% filter(gt_GT=="0/1") %>% group_by(Indiv) %>%summarize(num_het=n())
+
+# merge everything
+tidy_gt<-aa_tib %>% inner_join(het) %>% inner_join(der_tib) 
+toc()
+#1.606sec
+```
+
+###2.2.2 Trial 2
+```{r}
+tic()
+# ref is ancestral
+refAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(okpos) %>% group_by(Indiv, gt_GT) %>% summarize(count=n()) %>% ungroup() %>% mutate(gt = case_when(gt_GT=='0/0' ~ 'refAA_homanc', gt_GT=='0/1' ~'refAA_het', gt_GT=='1/1' ~'refAA_homder')) %>% select(-gt_GT) %>% pivot_wider(names_from=gt, values_from=count)
+# ref is derived
+altAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(invertpos) %>% group_by(Indiv, gt_GT) %>% summarize(count=n()) %>% ungroup() %>% mutate(gt = case_when(gt_GT=='0/0' ~ 'altAA_homder', gt_GT=='0/1' ~'altAA_het', gt_GT=='1/1' ~'altAA_homanc')) %>% select(-gt_GT) %>% pivot_wider(names_from=gt, values_from=count)
+# merge
+tidy_gt2 <- refAA_tib %>% inner_join(altAA_tib) %>% transmute(Indiv, num_aa=altAA_homanc+refAA_homanc, num_het=refAA_het+altAA_het, num_der=refAA_homder+altAA_homder) 
+toc()
+#0.993 sec
+```
+###2.2.3 Trial 3 - Best version!
+```{r}
+tic()
+tidy_gt3<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(tidy_vcf$fix)  %>% mutate(new_gt=case_when((ALT==AA & gt_GT=='0/0') ~'1/1', (ALT==AA & gt_GT=='1/1') ~'0/0', TRUE ~ gt_GT)) %>% group_by(Indiv, new_gt) %>% summarize(count=n()) %>% ungroup() %>% mutate_if(is.character, str_replace_all, pattern = "/", replacement = "") %>% pivot_wider(names_from=new_gt, names_prefix="gt", values_from=count)
+toc()
+#0.691 sec
+
+# But I think I want a fourth column with the totals so I can plot the frequency, and I need to add the population names!
+final_gt<- tidy_gt3 %>% mutate(sum=gt00+gt01+gt11)
 ```
 
 
-# 3. Analysis
+# 3. Analysis - plot the boxes
 ```{r}
-myDiff <- genetic_diff(vcf, pops = pop, method = 'nei')
+ggplot(final_gt,aes(cut,price))+
+  geom_boxplot(aes(fill=color))
 ```
 
