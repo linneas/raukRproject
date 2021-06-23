@@ -19,10 +19,12 @@ require(tictoc)
 tic()
 vcf_file="data/Wolf.deleterious.missense.polarized.vcf"
 pop_file="data/5TempClasses11I95F15R.pop.list"
+founder_file="data/founders.list"
+gen_file="data/generation.list"
 vcf <- read.vcfR(vcf_file)
-pop_table<-read.table(pop_file, header = FALSE, sep = "\t")
-pop_tib<-as_tibble(pop_table) %>% rename(Indiv=V1, Pop=V2)
-pop <- as.factor(pop_table$V2)
+pop_tib<-pop_file %>% read.table() %>% as_tibble() %>% rename(Indiv=V1, Pop=V2)
+
+gen_tib<-gen_file %>% read.table(header=TRUE) %>% as_tibble()
 toc()
 #7.417 sec (EBC)
 #7.442 sec (home)
@@ -137,7 +139,7 @@ ggplot(final_gt,aes(Pop, hetfrq))+
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 ```
-###3.1.4 Try facet
+### 3.1.4 Try facet
 ```{r}
 ggplot(final_gt,aes(Pop, hetfrq))+
   geom_boxplot(aes(fill=Pop))+
@@ -148,7 +150,7 @@ ggplot(final_gt,aes(Pop, hetfrq))+
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
 ```
-###3.1.4 Violin, colours etc
+### 3.1.5 Violin, colours etc
 ```{r}
 ggplot(final_gt,aes(Pop, hetfrq))+
   geom_violin(aes(fill=Pop))+
