@@ -7,10 +7,11 @@ output: html_document
 # 1 Setting up
 ```{r}
 renv::install("vcfR")
+renv::install("tictoc")
 require(vcfR)
 require(tidyverse)
-renv::install("tictoc")
 require(tictoc)
+require(viridis)
 
 ```
 
@@ -23,8 +24,8 @@ founder_file="data/founders.list"
 gen_file="data/generation.list"
 vcf <- read.vcfR(vcf_file)
 pop_tib<-pop_file %>% read.table() %>% as_tibble() %>% rename(Indiv=V1, Pop=V2)
-
-gen_tib<-gen_file %>% read.table(header=TRUE) %>% as_tibble()
+gen_tib<-gen_file %>% read.table(header=TRUE) %>% as_tibble() %>% rename(Generation=generation)
+fou_tib <- founder_file %>% read.table(header=TRUE) %>% as_tibble() %>% rename(Founder=Ftype)
 toc()
 #7.417 sec (EBC)
 #7.442 sec (home)
@@ -103,7 +104,7 @@ toc()
 #0.691 sec (home)
 
 #Add population names and some extra columns to facilitate plotting!
-final_gt<- tidy_gt3 %>% mutate(sum=gt00+gt01+gt11) %>% inner_join(pop_tib) %>% mutate(hetfrq=gt01/sum, homderfrq=gt11/sum, deralfreq=(gt11*2+gt01)/(sum*2),Grp=case_when(Pop=='Finland' | Pop=='Russia' ~ Pop, TRUE ~ 'Scandinavia')) 
+final_gt<- tidy_gt3 %>% mutate(sum=gt00+gt01+gt11) %>% inner_join(pop_tib) %>% mutate(hetfrq=gt01/sum, homderfrq=gt11/sum, deralfreq=(gt11*2+gt01)/(sum*2),Grp=case_when(Pop=='Finland' | Pop=='Russia' ~ Pop, TRUE ~ 'Scandinavia'))  %>% left_join(fou_tib) %>% left_join(gen_tib)
 ```
 
 
@@ -122,7 +123,7 @@ ggplot(final_gt,aes(Pop,hetfrq))+
 ```
 ### 3.1.2 Geometric jitter
 ```{r}
-ggplot(final_gt,aes(Pop,homderfrq))+
+ggplot(final_gt,aes(Pop,hetfrq))+
   geom_jitter(aes(color=Pop),alpha=0.3) +
   labs(x=NULL,y="proportion heterozygous sites")
 # This doesn't look good at all, too few points per class!
@@ -163,5 +164,49 @@ ggplot(final_gt,aes(Pop, hetfrq))+
         legend.title=element_blank(),
         axis.text.x=element_blank(),
         axis.ticks.x=element_blank())
+```
+### 3.1.6 Adding founder info and generations to founder
+```{r}
+p<- ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_violin(aes(fill=Pop))+
+  scale_fill_viridis(discrete=TRUE) +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(panel.grid.major = element_line(colour = 'white'),
+        panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.box='vertical')
+
+
+# add founders
+p+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+
+  scale_shape_manual(values=c(22,24))+
+  theme(legend.key=element_rect(fill='#3acf73', colour='NA')) +
+  geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) + 
+  scale_colour_continuous(low='#edf9ff', high='#008ed9', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+  #theme(legend.key=element_rect(fill='white', colour='NA'))
+  #scale_colour_distiller(type="seq", palette=8, direction=1)
+```
+
+### 3.1.7 Trying legends side by side
+```{r}
+p<- ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_violin(aes(fill=Pop))+
+  scale_fill_viridis(discrete=TRUE) +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(panel.grid.major = element_line(colour = 'white'),
+        panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.box = "horizontal")
+
+# add founders
+p+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+
+  scale_shape_manual(values=c(22,24))+
+  theme(legend.key=element_rect(fill='#3acf73', colour='NA')) +
+  geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) + 
+  scale_colour_continuous(low='#edf9ff', high='#008ed9', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
 ```
 
