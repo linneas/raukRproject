@@ -12,13 +12,13 @@ knitr::opts_chunk$set(echo=TRUE)
 knitr::opts_chunk$set(cache=TRUE)
 ```
 
-# Part 1  | Data and Aims
+# Data and Aims
 
 ## Data
 
 ### Whole genome SNP data from 210 wolves:
-    - *Scandinavian=Recently founded*
-    - *Finnish/Russian=Source population*
+  - Scandinavian -> *Recently founded*
+  - Finnish/Russian -> *Source population*
    
 ### Detailed information about Scandinavian population: 
   - *sample year*
@@ -31,11 +31,11 @@ knitr::opts_chunk$set(cache=TRUE)
 
 To rewrite bash&python code that extract frequencies of homozygous derived/heterozygous sites for each individual from the vcf file, and plot population differences along with all info given for the focal population
 
-### My personal goal
+### My personal R goal
 
 Learn how to use tidyverse (especially pipes) and ggplot
 
-# Part 2 | Results
+# Results
 
 ## Packages used
 ```{r, message=FALSE}
@@ -43,6 +43,8 @@ require(vcfR)
 require(tictoc)
 require(viridis)
 require(tidyverse)
+require(gtable)
+require(grid)
 ```
 
 ## Read in the vcf file and convert it to tidy 
@@ -56,13 +58,6 @@ tidy_vcf <- vcfR::vcfR2tidy(vcf,
 
 ```
 The population, founder and generation info from plain textfiles are saved as tibbles directly
-```{r, eval=FALSE}
-# example
-pop_tib<- "data/populations.txt" %>% 
-      read.table() %>% 
-      as_tibble() %>% 
-      rename(Indiv=V1, Pop=V2)
-```
 
 
 ```{r, include=FALSE}
@@ -113,6 +108,8 @@ toc()
 ## Extract relevant info - Trial #2
 ```{r, message=FALSE}
 tic()
+okpos<- tidy_vcf$fix %>%filter(REF==AA)
+invertpos<-tidy_vcf$fix %>%filter(ALT==AA)
 refAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(okpos) %>% group_by(Indiv, gt_GT) %>% summarize(count=n()) %>% ungroup() %>% mutate(gt = case_when(gt_GT=='0/0' ~ 'refAA_homanc', gt_GT=='0/1' ~'refAA_het', gt_GT=='1/1' ~'refAA_homder')) %>% select(-gt_GT) %>% pivot_wider(names_from=gt, values_from=count)
 altAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(invertpos) %>% group_by(Indiv, gt_GT) %>% summarize(count=n()) %>% ungroup() %>% mutate(gt = case_when(gt_GT=='0/0' ~ 'altAA_homder', gt_GT=='0/1' ~'altAA_het', gt_GT=='1/1' ~'altAA_homanc')) %>% select(-gt_GT) %>% pivot_wider(names_from=gt, values_from=count)
 tidy_gt2 <- refAA_tib %>% inner_join(altAA_tib) %>% transmute(Indiv, num_aa=altAA_homanc+refAA_homanc, num_het=refAA_het+altAA_het, num_der=refAA_homder+altAA_homder) 
@@ -158,21 +155,50 @@ ggplot(final_gt,aes(Pop,hetfrq)) + geom_boxplot(aes(fill=Pop)) +
 ## Reorder and add facets
 ```{r}
 final_gt$Pop <- factor(final_gt$Pop, levels = c("1983-1990", "1991-1998", "1999-2006", "2007-2014S", "2007-2014I", "Immigrant", "Finland", "Russia"))
-ggplot(final_gt,aes(Pop, hetfrq))+geom_boxplot(aes(fill=Pop))+
-  geom_point() + facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") + labs(x=NULL,y="proportion heterozygous sites")+
-  theme(legend.title=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())
+ggplot(final_gt,aes(Pop, hetfrq))+geom_boxplot(aes(fill=Pop))+geom_point() + facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") + labs(x=NULL,y="proportion heterozygous sites")+ theme(legend.title=element_blank(),axis.text.x=element_blank(),axis.ticks.x=element_blank())
 ```
 
-## Violin, changing colours etc
+## Violin plot, changing colours etc
 ```{r}
 ggplot(final_gt,aes(Pop, hetfrq))+  geom_violin(aes(fill=Pop))+  geom_point() + scale_fill_viridis(discrete=TRUE) + facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +  labs(x=NULL,y="proportion heterozygous sites")+theme(panel.grid.major = element_line(colour = 'white'),      panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),legend.title=element_blank(), axis.text.x=element_blank(),axis.ticks.x=element_blank())
 ```
 
 ## Adding founder and generation info
 ```{r}
-p<- ggplot(final_gt,aes(Pop, hetfrq))+geom_violin(aes(fill=Pop))+ scale_fill_viridis(discrete=TRUE) +facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") + labs(x=NULL,y="proportion heterozygous sites")+ theme(panel.grid.major = element_line(colour = 'white'),panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),axis.text.x=element_blank(),axis.ticks.x=element_blank(),legend.box='vertical')
-p+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+  scale_shape_manual(values=c(22,24))+theme(legend.key=element_rect(fill='#3acf73', colour='NA')) + geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) +   scale_colour_continuous(low='#edf9ff', high='#008ed9', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+p<- ggplot(final_gt,aes(Pop, hetfrq))+geom_violin(aes(fill=Pop))+ scale_fill_viridis(discrete=TRUE, guide=FALSE) +facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") + labs(x=NULL,y="proportion heterozygous sites")+ theme(panel.grid.major = element_line(colour = 'white'),panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),legend.box='vertical', axis.text.x = element_text(angle = 45,hjust=1))+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+  scale_shape_manual(values=c(22,24))+theme(legend.key=element_rect(fill='#3acf73', colour='NA')) + geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) +   scale_colour_continuous(low='#fffee3', high='#0214a3', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+p
 ```
+
+## Fixing x-axis using gtable/grid
+
+```{r, message=FALSE, echo=FALSE}
+require(gtable)
+require(grid)
+p<- ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_violin(aes(fill=Pop))+
+  scale_fill_viridis(discrete=TRUE, guide=FALSE) +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(panel.grid.major = element_line(colour = 'white'),
+        panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),
+        axis.text.x = element_text(angle = 45, hjust=1),
+        legend.box = "vertical") +
+  geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+
+  scale_shape_manual(values=c(22,24))+
+  theme(legend.key=element_rect(fill='#3acf73', colour='NA')) +
+  geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) + 
+  scale_colour_continuous(low='#fffee3', high='#0214a3', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+plot_tab <- ggplotGrob(p)
+plot_filtered <- gtable_filter(plot_tab, 
+                     "(background|panel|strip-t|axis-l|xlab|ylab|guide-box|title|subtitle|caption|tag|axis-b-1)",
+                     trim=FALSE)
+grid.newpage()
+grid.draw(plot_filtered)
+```
+
+
+
+
 
 # Conclusions
 
@@ -184,5 +210,9 @@ p+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, 
 
 > - Started to dig into the world of ggplots
 
+## Github 
+https://github.com/linneas/raukRproject
+
 # Thank you
 <img src="images/female_wolf_Ilpo Kojola.jpg" width="350px">
+
