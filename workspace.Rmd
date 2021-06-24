@@ -5,9 +5,9 @@ output: html_document
 ---
 
 # 1 Setting up
-```{r}
-renv::install("vcfR")
-renv::install("tictoc")
+```{r, message=FALSE}
+#renv::install("vcfR")
+#renv::install("tictoc")
 require(vcfR)
 require(tidyverse)
 require(tictoc)
@@ -55,7 +55,7 @@ invertpos<-tidy_vcf$fix %>%filter(ALT==AA)
 
 ## 2.2 Extracting relevant data 
 ### 2.2.1 Trial 1
-```{r}
+```{r, message=FALSE}
 tic()
 # REF is ANCESTRAL
 # 0/0 
@@ -83,7 +83,7 @@ toc()
 ```
 
 ###2.2.2 Trial 2
-```{r}
+```{r, message=FALSE}
 tic()
 # ref is ancestral
 refAA_tib<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(okpos) %>% group_by(Indiv, gt_GT) %>% summarize(count=n()) %>% ungroup() %>% mutate(gt = case_when(gt_GT=='0/0' ~ 'refAA_homanc', gt_GT=='0/1' ~'refAA_het', gt_GT=='1/1' ~'refAA_homder')) %>% select(-gt_GT) %>% pivot_wider(names_from=gt, values_from=count)
@@ -96,7 +96,7 @@ toc()
 #0.993 sec (home)
 ```
 ###2.2.3 Trial 3 - Best version!
-```{r}
+```{r, message=FALSE}
 tic()
 tidy_gt3<-tidy_vcf$gt %>% filter(!is.na(gt_GT)) %>% inner_join(tidy_vcf$fix)  %>% mutate(new_gt=case_when((ALT==AA & gt_GT=='0/0') ~'1/1', (ALT==AA & gt_GT=='1/1') ~'0/0', TRUE ~ gt_GT)) %>% group_by(Indiv, new_gt) %>% summarize(count=n()) %>% ungroup() %>% mutate_if(is.character, str_replace_all, pattern = "/", replacement = "") %>% pivot_wider(names_from=new_gt, names_prefix="gt", values_from=count)
 toc()
@@ -208,5 +208,32 @@ p+geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, 
   theme(legend.key=element_rect(fill='#3acf73', colour='NA')) +
   geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) + 
   scale_colour_continuous(low='#edf9ff', high='#008ed9', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+```
+
+## Removing one legend, adding back the text on the x-axis
+
+```{r, message=FALSE}
+require(gtable)
+require(grid)
+p<- ggplot(final_gt,aes(Pop, hetfrq))+
+  geom_violin(aes(fill=Pop))+
+  scale_fill_viridis(discrete=TRUE, guide=FALSE) +
+  facet_grid(~factor(Grp, level=c("Scandinavia", "Finland", "Russia")), scales="free_x", space="free_x") +
+  labs(x=NULL,y="proportion heterozygous sites")+
+  theme(panel.grid.major = element_line(colour = 'white'),
+        panel.background = element_rect(fill = '#f5f4e6', colour = '#FFFDF8'),
+        axis.text.x = element_text(angle = 45, hjust=1),
+        legend.box = "vertical") +
+  geom_point(data=filter(final_gt, !is.na(Founder)),aes(shape=Founder), size=3, col='darkgrey', fill='lightyellow')+
+  scale_shape_manual(values=c(22,24))+
+  theme(legend.key=element_rect(fill='#3acf73', colour='NA')) +
+  geom_point(data=filter(final_gt, !is.na(Generation)), aes(color=Generation)) + 
+  scale_colour_continuous(low='#fffee3', high='#0214a3', breaks = c(1,2,3,4,5,6), labels = c(1,2,3,4,5,6))
+plot_tab <- ggplotGrob(p)
+plot_filtered <- gtable_filter(plot_tab, 
+                     "(background|panel|strip-t|axis-l|xlab|ylab|guide-box|title|subtitle|caption|tag|axis-b-1)",
+                     trim=FALSE)
+grid.newpage()
+grid.draw(plot_filtered)
 ```
 
